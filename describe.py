@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+from sys import argv
 
 def ft_count(data):
     counts = {}
@@ -59,20 +60,42 @@ def ft_std(data, means):
             stds[column] = np.sqrt(variance)
     return stds
 
+def ft_quantile(data, q):
+    if q < 0 or q > 1:
+        raise ValueError("q must be between 0 and 1")
+    quantiles = {}
+    for column in data.columns:
+        feature = data[column].dropna()
+        sorted_feature = sorted(list(feature))
+        quantile_exact_pos = (len(feature) - 1) * q
+        quantile_index = int(quantile_exact_pos)
+        lower_quantile = sorted_feature[quantile_index]
+        upper_quantile = sorted_feature[quantile_index + 1]
+        interpolation_coef = quantile_exact_pos - quantile_index
+        quantile = lower_quantile + (upper_quantile - lower_quantile) * interpolation_coef
+        quantiles[column] = quantile
+    return quantiles
+
+def describe(dataframe):
+    assert dataframe is not None, "The data set is not a proper csv file" 
+    numerical_cols = dataframe.select_dtypes(include=['number']).columns
+    non_empty_numerical_cols = [col for col in numerical_cols if not dataframe[col].isna().all()]
+    numerical_data = dataframe[non_empty_numerical_cols]
+    counts = ft_count(numerical_data)
+    means = ft_mean(numerical_data)
+    mins = ft_min(numerical_data)
+    maxes = ft_max(numerical_data)
+    stds = ft_std(numerical_data, means)
+    quantile25 = ft_quantile(numerical_data, 0.25)
+    quantile50 = ft_quantile(numerical_data, 0.50)
+    quantile75 = ft_quantile(numerical_data, 0.75)
+    return pd.DataFrame([counts, means, stds, mins, quantile25, quantile50, quantile75, maxes], index=["count", "mean", "std", "min", "25%", "50%", "75%", "max"])
+
 def main():
     try:
-        data = pd.read_csv("datasets/dataset_train.csv")
-        assert data is not None, "The data set is not a proper csv file" 
-        numerical_data = data.select_dtypes(include=['number']) 
-
-        counts = ft_count(numerical_data)
-        means = ft_mean(numerical_data)
-        mins = ft_min(numerical_data)
-        maxes = ft_max(numerical_data)
-        stds = ft_std(numerical_data, means)
-
-        res = pd.DataFrame([counts, means, mins, maxes, stds], index=["count", "mean", "min", "max", "std"])
-        print (res)
+        assert len(argv) == 2, "The script needs a data file as argument"
+        data = pd.read_csv(argv[1])
+        print(describe(data))
 
     except (AssertionError, Exception) as err:
         print("Error: ", err)
