@@ -10,6 +10,7 @@ class SortingHat:
         self.logreg_g = LogReg(n_features, 'House Gryffindor', lr)
         self.logreg_r = LogReg(n_features, 'House Ravenclaw', lr)
         self.learning_rate = lr
+        self.losses = []
 
     def __call__(self, X):
         # print(np.array([self.logreg_s(X), self.logreg_h(X), self.logreg_g(X), self.logreg_r(X)]))
@@ -18,13 +19,27 @@ class SortingHat:
     def predict(self, X):
         return np.argmax(self.__call__(X), axis=0)
 
-    def train_step(self, X_train, Y_train, lr=None):
+    def train_step(self, X_train, Y_train, X_test, Y_test, lr=None):
         if lr == None:
             lr = self.learning_rate
-        self.logreg_s.train_step(X_train, Y_train, lr)
-        self.logreg_h.train_step(X_train, Y_train, lr)
-        self.logreg_g.train_step(X_train, Y_train, lr)
-        self.logreg_r.train_step(X_train, Y_train, lr)
+        self.logreg_s.train_step(X_train, Y_train, X_test, Y_test, lr)
+        self.logreg_h.train_step(X_train, Y_train, X_test, Y_test, lr)
+        self.logreg_g.train_step(X_train, Y_train, X_test, Y_test, lr)
+        self.logreg_r.train_step(X_train, Y_train, X_test, Y_test, lr)
+        self.losses.append({
+            'step': len(self.losses) + 1,
+            'train_loss':
+                self.logreg_s.losses[-1]['train_loss'] +
+                self.logreg_h.losses[-1]['train_loss'] +
+                self.logreg_g.losses[-1]['train_loss'] +
+                self.logreg_r.losses[-1]['train_loss'],
+            'test_loss':
+                self.logreg_s.losses[-1]['test_loss'] +
+                self.logreg_h.losses[-1]['test_loss'] +
+                self.logreg_g.losses[-1]['test_loss'] +
+                self.logreg_r.losses[-1]['test_loss']
+        })
+
 
 class LogReg:
     def __init__(self, n_features, target_column, lr):
@@ -45,7 +60,7 @@ class LogReg:
         proba = self.__call__(X)
         return (proba >= 0.5).astype(int)
 
-    def train_step(self, X_train, Y_train, lr=None):
+    def train_step(self, X_train, Y_train, X_test, Y_test, lr=None):
         if lr == None:
             lr = self.learning_rate
         # print(self.__call__(X_train))
@@ -55,7 +70,8 @@ class LogReg:
         self.bias = self.bias - lr * (np.sum(error))
         self.losses.append({
             'step': len(self.losses) + 1,
-            'loss': self.loss(X_train, Y_train[self.target_column])
+            'train_loss': self.loss(X_train, Y_train[self.target_column]),
+            'test_loss': self.loss(X_test, Y_test[self.target_column])
         })
 
     def loss(self, X, Y):
