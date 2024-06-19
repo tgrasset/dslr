@@ -1,9 +1,13 @@
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-from sys import argv
-from typing import List
+import sys
 
+COLS_TO_DROP = ['Index', 'First Name', 'Last Name', 'Birthday', 'Defense Against the Dark Arts', 'Arithmancy', 'Care of Magical Creatures']
+NUMERICAL_COLS = ['Astronomy', 'Herbology', 'Divination', 'Muggle Studies', 'Ancient Runes', 'Charms', 'Potions', 'Transfiguration', 'History of Magic', 'Flying']
+CATEGORICAL_COLS = ['Best Hand']
+TARGET_CLASSES = ['Slytherin', 'Hufflepuff', 'Gryffindor', 'Ravenclaw']
+LEARNING_RATE = 0.02
+EPOCHS = 1000
 
 class SimpleImputer:
     def __init__(self, numerical_columns, categorical_columns):
@@ -97,42 +101,6 @@ class PreprocessorPipeline:
         return X_preprocessed
 
 
-class SortingHat:
-    def __init__(self, n_features, lr):
-        self.logreg_s = LogReg(n_features, 'House Slytherin', lr)
-        self.logreg_h = LogReg(n_features, 'House Hufflepuff', lr)
-        self.logreg_g = LogReg(n_features, 'House Gryffindor', lr)
-        self.logreg_r = LogReg(n_features, 'House Ravenclaw', lr)
-        self.learning_rate = lr
-        self.losses = []
-
-    def __call__(self, X):
-        # print(np.array([self.logreg_s(X), self.logreg_h(X), self.logreg_g(X), self.logreg_r(X)]))
-        return np.array([self.logreg_s(X), self.logreg_h(X), self.logreg_g(X), self.logreg_r(X)])
-
-    def predict(self, X):
-        return pd.Series(np.argmax(self.__call__(X), axis=0), index=X.index)
-
-    def train_step(self, X_train, Y_train, X_test=None, Y_test=None, lr=None):
-        if lr == None:
-            lr = self.learning_rate
-        self.logreg_s.train_step(X_train, Y_train, X_test, Y_test, lr)
-        self.logreg_h.train_step(X_train, Y_train, X_test, Y_test, lr)
-        self.logreg_g.train_step(X_train, Y_train, X_test, Y_test, lr)
-        self.logreg_r.train_step(X_train, Y_train, X_test, Y_test, lr)
-        loss = {
-            'step': len(self.losses) + 1,
-            'train_loss':
-                self.logreg_s.losses[-1]['train_loss'] +
-                self.logreg_h.losses[-1]['train_loss'] +
-                self.logreg_g.losses[-1]['train_loss'] +
-                self.logreg_r.losses[-1]['train_loss']
-        }
-        if X_test is not None and Y_test is not None:
-            loss['test_loss'] = self.logreg_s.losses[-1]['test_loss'] + self.logreg_h.losses[-1]['test_loss'] + self.logreg_g.losses[-1]['test_loss'] + self.logreg_r.losses[-1]['test_loss']
-        self.losses.append(loss)
-
-
 class LogReg:
     def __init__(self, n_features, target_column, lr):
         self.target_column = target_column
@@ -169,89 +137,66 @@ class LogReg:
         return loss
 
 
-# def updateParams(estimate, km, prices, tmp0, tmp1, learningRate):
-#     """
-#     theta0 and theta1 are updated according to the formulas given in the subject
-#     according to the gradient descent rule. The new values are returned.
-#     """
-#     m = len(prices)
-#     tmp0 = tmp0 - (learningRate * (1 / m) * np.sum(estimate - prices))
-#     tmp1 = tmp1 - (learningRate * (1 / m) * np.sum((estimate - prices) * km))
-#     return tmp0, tmp1
+class SortingHat:
+    def __init__(self, n_features, lr):
+
+        self.logregs = {target_class: LogReg(n_features, target_class, lr) for target_class in TARGET_CLASSES}
+        self.learning_rate = lr
+        self.parameters = {
+            logreg_item[0]: np.append(logreg_item[1].weights, [logreg_item[1].bias]) for logreg_item in self.logregs.items()
+        }
+        self.losses = []
+
+    def __call__(self, X):
+        return {target_class: self.logregs[target_class].__call__(X) for target_class in TARGET_CLASSES}
+
+    def predict(self, X):
+        return pd.DataFrame(self.__call__(X)).idxmax(axis=1)
+
+    def train_step(self, X_train, Y_train, X_test=None, Y_test=None, lr=None):
+        if lr == None:
+            lr = self.learning_rate
+        for logreg in self.logregs.values():
+            logreg.train_step(X_train, Y_train, X_test, Y_test, lr)
+        loss = {
+            'step': len(self.losses) + 1,
+            'train_loss': sum([logreg.losses[-1]['train_loss'] for logreg in self.logregs.values()])
+        }
+        if X_test is not None and Y_test is not None:
+            loss['test_loss'] = sum([logreg.losses[-1]['test_loss'] for logreg in self.logregs.values()])
+        self.losses.append(loss)
+        self.parameters = {
+            logreg_item[0]: np.append(logreg_item[1].weights, [logreg_item[1].bias]) for logreg_item in self.logregs.items()
+        }
+
+def main():
+    try:
+        # Read and format data
+        assert len(sys.argv) == 2, "The script needs a data file as argument"
+        data = pd.read_csv(sys.argv[1])
+        data = data.drop(columns=COLS_TO_DROP)
+        X = data.drop(columns=['Hogwarts House']) # features
+        for target_class in TARGET_CLASSES:
+            data[target_class] = (data['Hogwarts House'] == target_class).astype(int)
+        Y = data[TARGET_CLASSES] # target
+
+        # Features preprocessings
+        imputer = SimpleImputer(NUMERICAL_COLS, CATEGORICAL_COLS)
+        scaler = StandardScaler(NUMERICAL_COLS)
+        ohe = OneHotEncoder(CATEGORICAL_COLS)
+        preprocessor = PreprocessorPipeline([imputer, scaler, ohe])
+        preprocessor.fit(X)
+        X_preprocessed = preprocessor.transform(X)
+
+        # model training
+        sorting_hat = SortingHat(X_preprocessed.shape[1], lr=LEARNING_RATE)
+        for i in range(EPOCHS):
+            sorting_hat.train_step(X_preprocessed, Y)
+        sorting_hat
 
 
-# def linearRegression(normKm, prices, kmMean, kmStd):
-#     """
-#     This function implements the gradient descent algorithm to find the best
-#     parameters for our model, updating the two arguments given to it many times
-#     """
-#     tmp0 = 0
-#     tmp1 = 0
-#     epochs = 100
-#     learningRate = 0.1
-#     x = np.linspace(min(normKm), max(normKm), 100)
+    except (AssertionError, Exception) as err:
+        print("Error: ", err)
 
-#     for i in range(epochs):
-#         estimate = tryParams(normKm, tmp0, tmp1)
-#         # if i % 5 == 0:
-#         #     deNormX = x * kmStd + kmMean
-#         #     y = tmp0 + tmp1 * x
-#         #     plt.plot(deNormX, y, label=f'Epoch {i}')
-#         tmp0, tmp1 = updateParams(estimate, normKm, prices, tmp0, tmp1, learningRate)
-#     deNormX = x * kmStd + kmMean
-#     y = tmp0 + tmp1 * x
-#     plt.plot(deNormX, y, 'r', label='Final Regression Line')
-#     plt.legend()
-#     plt.title('Cars selling price vs Mileage')
-#     plt.xlabel('km')
-#     plt.ylabel('price')
-#     return tmp0, tmp1
-
-# def readData(filePath):
-#     """
-#     Gets data from the file and returns two arrays corresponding to mileage and price
-#     """
-#     data = pd.read_csv(filePath)
-#     assert data is not None, "The data set is not a proper csv file"
-#     assert data.shape[1] == 2, "The data set must contain exactly two columns"
-#     x = data.iloc[:, 0]
-#     y = data.iloc[:, 1]
-#     return x, y
-
-# def normalizeData(x):
-#     """
-#     Since kilometers have such a big scale, we normalize the data, reducing values to
-#     small values around 0 to minimize the error during gradient descent math
-#     """
-#     mean = np.mean(x)
-#     std = np.std(x)
-#     return (x - mean) / std, mean, std
-
-
-# def main():
-#     try:
-#         assert len(argv) == 2, "The script needs a data file as argument"
-#         km, prices = readData(argv[1])
-#         normKm, kmMean, kmStd = normalizeData(km)
-#         normTheta0, normTheta1= linearRegression(normKm, prices, kmMean, kmStd)
-#         # following two lines convert theta1 and theta0 to their un-normalized values
-#         theta1 = normTheta1 / kmStd
-#         theta0 = normTheta0 - (theta1 * kmMean)
-#         print("Training complete !")
-#         print(f"Final values ---> theta 0 : {theta0}, theta1 : {theta1}")
-#         df = pd.DataFrame({
-#             "theta0": [theta0],
-#             "theta1": [theta1]
-#         })
-#         df.to_csv("thetas.csv", index=False)
-#         print("Values saved in thetas.csv")
-#         plt.scatter(km, prices)
-#         plt.show()
-#         return 0
-
-#     except (AssertionError, Exception) as err:
-#         print("Error: ", err)
-#         return 1
-
-# if __name__ == "__main__":
-#     main()
+if __name__ == "__main__":
+    main()
