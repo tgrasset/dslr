@@ -9,10 +9,10 @@ def main():
         data['House Hufflepuff'] = (data['Hogwarts House'] == 'Hufflepuff')
         data['House Gryffindor'] = (data['Hogwarts House'] == 'Gryffindor')
         data['House Ravenclaw'] = (data['Hogwarts House'] == 'Ravenclaw')
-        data = data.drop(columns=['Hogwarts House', 'Index', 'First Name', 'Last Name', 'Birthday'])
-        fig = sns.pairplot(data)
-        fig.savefig("pair_plot.png")   
-        
+        data = data.drop(columns=['Index', 'First Name', 'Last Name', 'Birthday'])
+        fig = sns.pairplot(data, hue='Hogwarts House')
+        fig.savefig("pair_plot.png")
+
     except (AssertionError, Exception) as err:
         print("Error: ", err)
 
