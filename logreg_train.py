@@ -144,9 +144,6 @@ class LogReg:
         self.losses = []
 
     def __call__(self, X):
-        # print(X.shape)
-        # print(self.weights.shape)
-        # print(self.bias + X @ self.weights)
         linreg_result = self.bias + X @ self.weights
         return 1 / (1 + np.exp(-linreg_result))
 
@@ -157,8 +154,6 @@ class LogReg:
     def train_step(self, X_train, Y_train, X_test, Y_test, lr=None):
         if lr == None:
             lr = self.learning_rate
-        # print(self.__call__(X_train))
-        # print(Y_train[self.target_column])
         error = self.__call__(X_train) - Y_train[self.target_column]
         self.weights = self.weights - lr * (1 / len(X_train)) * (X_train.T @ error)
         self.bias = self.bias - lr * (np.sum(error))
