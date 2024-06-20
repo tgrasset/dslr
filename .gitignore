@@ -2,3 +2,4 @@ __pycache__/
 histogram.png
 pair_plot.pngscatter_plot.png
 histogram.html
+model.json

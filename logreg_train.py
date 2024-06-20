@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import json
 import sys
 
 COLS_TO_DROP = ['Index', 'First Name', 'Last Name', 'Birthday', 'Defense Against the Dark Arts', 'Arithmancy', 'Care of Magical Creatures']
@@ -104,7 +105,7 @@ class PreprocessorPipeline:
 class LogReg:
     def __init__(self, n_features, target_column, lr):
         self.target_column = target_column
-        self.weights = np.array([0 for i in range(n_features)])
+        self.weights = [0 for i in range(n_features)]
         self.bias = 0
         self.learning_rate = lr
         self.losses = []
@@ -121,7 +122,7 @@ class LogReg:
         if lr == None:
             lr = self.learning_rate
         error = self.__call__(X_train) - Y_train[self.target_column]
-        self.weights = self.weights - lr * (1 / len(X_train)) * (X_train.T @ error)
+        self.weights = (self.weights - lr * (1 / len(X_train)) * (X_train.T @ error)).values.tolist()
         self.bias = self.bias - lr * (np.sum(error))
         loss = {
             'step': len(self.losses) + 1,
@@ -143,7 +144,7 @@ class SortingHat:
         self.logregs = {target_class: LogReg(n_features, target_class, lr) for target_class in TARGET_CLASSES}
         self.learning_rate = lr
         self.parameters = {
-            logreg_item[0]: np.append(logreg_item[1].weights, [logreg_item[1].bias]) for logreg_item in self.logregs.items()
+            logreg_item[0]: [logreg_item[1].bias] + logreg_item[1].weights for logreg_item in self.logregs.items()
         }
         self.losses = []
 
@@ -166,8 +167,21 @@ class SortingHat:
             loss['test_loss'] = sum([logreg.losses[-1]['test_loss'] for logreg in self.logregs.values()])
         self.losses.append(loss)
         self.parameters = {
-            logreg_item[0]: np.append(logreg_item[1].weights, [logreg_item[1].bias]) for logreg_item in self.logregs.items()
+            logreg_item[0]: [logreg_item[1].bias] + logreg_item[1].weights for logreg_item in self.logregs.items()
         }
+
+    def save_model(self, path):
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(self.parameters, f, ensure_ascii=False, indent=4)
+
+    def load_model(self, path):
+        with open(path, 'r', encoding='utf-8') as f:
+            self.parameters = json.load(f)
+        for logreg in self.logregs.values():
+            logreg_parameters = self.parameters[logreg.target_column]
+            logreg.weights = logreg_parameters[1:]
+            logreg.bias = logreg_parameters[0]
+
 
 def main():
     try:
@@ -192,7 +206,7 @@ def main():
         sorting_hat = SortingHat(X_preprocessed.shape[1], lr=LEARNING_RATE)
         for i in range(EPOCHS):
             sorting_hat.train_step(X_preprocessed, Y)
-        sorting_hat
+        sorting_hat.save_model('model.json')
 
 
     except (AssertionError, Exception) as err:
