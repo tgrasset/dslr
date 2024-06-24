@@ -46,6 +46,7 @@ class SortingHat:
 
         self.logregs = {target_class: LogReg(n_features, target_class, lr) for target_class in TARGET_CLASSES}
         self.learning_rate = lr
+        self.preprocessings = 
         self.parameters = {
             logreg_item[0]: [logreg_item[1].bias] + logreg_item[1].weights for logreg_item in self.logregs.items()
         }
