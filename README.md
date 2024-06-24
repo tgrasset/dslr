@@ -45,5 +45,5 @@ Optional : Use our `describe.py` script to get information about the dataset suc
 
 ## Acknowledgements
 
-This project was made with my teammate acostes at 42 school.
+This project was made with my teammate [acostes](https://github.com/acsts) at 42 school.
 
